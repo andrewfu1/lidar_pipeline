@@ -12,6 +12,8 @@ Implements the preprocessing and segmentation stages of a LiDAR processing pipel
 
 ## Run
 
+Python 3.10+
+
 ```bash
 pip install -r requirements.txt
 
