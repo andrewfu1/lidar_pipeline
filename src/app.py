@@ -7,7 +7,7 @@ import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
 
-from src.data_loader import load_kitti_txt, load_kitti_bin
+from src.data_loader import load_kitti_txt
 from src.preprocessing import voxel_downsample, radial_outlier_removal
 from src.ransac import ransac_ground_plane
 from src.clustering import dbscan_cluster
@@ -263,6 +263,7 @@ def main():
 
         run_button = st.button("Run Pipeline", type="primary", use_container_width=True)
 
+    # Main pipeline
     if run_button and input_file:
         path = Path(input_file)
         if not path.exists():
@@ -270,10 +271,11 @@ def main():
             return
 
         with st.spinner("Running pipeline..."):
-            if path.suffix == ".txt":
-                raw_points = load_kitti_txt(str(path))
-            else:
-                raw_points = load_kitti_bin(str(path))
+            if path.suffix != ".txt":
+                st.error(f"Unsupported file format: {path.suffix}. Only .txt files are supported.")
+                return
+
+            raw_points = load_kitti_txt(str(path))
 
             downsampled = voxel_downsample(raw_points, voxel_size=voxel_size)
 
