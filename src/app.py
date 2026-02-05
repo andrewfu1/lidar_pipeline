@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -7,7 +8,7 @@ import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
 
-from src.data_loader import load_kitti_txt
+from src.data_loader import load_kitti_txt, discover_kitti_sequence
 from src.preprocessing import voxel_downsample, radial_outlier_removal
 from src.ransac import ransac_ground_plane
 from src.clustering import dbscan_cluster
@@ -200,9 +201,75 @@ def main():
 
     with st.sidebar:
         st.header("Input")
-        sample_name = st.selectbox("Point cloud", list(SAMPLES.keys()))
-        input_file = SAMPLES[sample_name]["points"]
-        image_file = SAMPLES[sample_name]["image"]
+        mode = st.radio("Mode", ["Single Frame", "Sequence"], horizontal=True)
+
+        input_file = None
+        image_file = None
+        num_frames = 0
+        frame_idx = 0
+        fps = 2
+
+        if mode == "Single Frame":
+            sample_name = st.selectbox("Point cloud", list(SAMPLES.keys()))
+            input_file = SAMPLES[sample_name]["points"]
+            image_file = SAMPLES[sample_name]["image"]
+        else:
+            seq_dir = st.text_input(
+                "Sequence directory",
+                value="data/2011_09_26_drive_0001_extract",
+            )
+
+            if seq_dir != st.session_state.get("_seq_dir_cached"):
+                st.session_state["_seq_frames"] = discover_kitti_sequence(seq_dir)
+                st.session_state["_seq_dir_cached"] = seq_dir
+
+            frames = st.session_state.get("_seq_frames", [])
+            num_frames = len(frames)
+
+            # Handle frame navigation BEFORE slider widget is created
+            current_idx = st.session_state.get("frame_idx", 0)
+            if st.session_state.pop("_advance_frame", False):
+                if current_idx < num_frames - 1:
+                    st.session_state["frame_idx"] = current_idx + 1
+                else:
+                    st.session_state["auto_play"] = False
+            if st.session_state.pop("_prev_frame", False) and current_idx > 0:
+                st.session_state["frame_idx"] = current_idx - 1
+            if st.session_state.pop("_next_frame", False) and current_idx < num_frames - 1:
+                st.session_state["frame_idx"] = current_idx + 1
+
+            if num_frames == 0:
+                st.warning("No frames found in sequence directory.")
+            else:
+                frame_idx = st.slider(
+                    "Frame",
+                    0, num_frames - 1,
+                    st.session_state.get("frame_idx", 0),
+                    key="frame_idx",
+                )
+
+                col_prev, col_next, col_play = st.columns(3)
+                with col_prev:
+                    if st.button("< Prev", use_container_width=True, disabled=frame_idx == 0):
+                        st.session_state["_prev_frame"] = True
+                        st.rerun()
+                with col_next:
+                    if st.button("Next >", use_container_width=True, disabled=frame_idx >= num_frames - 1):
+                        st.session_state["_next_frame"] = True
+                        st.rerun()
+                with col_play:
+                    is_playing = st.session_state.get("auto_play", False)
+                    play_label = "Stop" if is_playing else "Play"
+                    if st.button(play_label, use_container_width=True):
+                        st.session_state["auto_play"] = not is_playing
+                        st.rerun()
+
+                if st.session_state.get("auto_play"):
+                    fps = st.slider("FPS", 1, 10, 2)
+
+                current_frame = frames[frame_idx]
+                input_file = str(current_frame["points"])
+                image_file = str(current_frame["image"]) if current_frame["image"] else None
 
         voxel_size = 0.1
         radius_scale = 0.03
@@ -263,8 +330,20 @@ def main():
 
         run_button = st.button("Run Pipeline", type="primary", use_container_width=True)
 
+    # Determine if pipeline should run
+    should_run = False
+    if mode == "Single Frame":
+        should_run = run_button and input_file
+    else:
+        # In Sequence mode: auto-run on frame change OR when button clicked
+        frame_changed = (
+            input_file is not None
+            and st.session_state.get("_last_frame") != str(input_file)
+        )
+        should_run = frame_changed or (run_button and input_file)
+
     # Main pipeline
-    if run_button and input_file:
+    if should_run:
         path = Path(input_file)
         if not path.exists():
             st.error(f"File not found: {path}")
@@ -320,6 +399,7 @@ def main():
                 "cluster_sizes": cluster_result.cluster_sizes,
                 "noise_count": cluster_result.noise_count,
             }
+            st.session_state["_last_frame"] = str(input_file)
 
     if "result" not in st.session_state:
         st.info("Configure parameters in the sidebar and click **Run Pipeline** to begin.")
@@ -327,18 +407,32 @@ def main():
 
     r = st.session_state["result"]
 
-    tab_preproc, tab_ground, tab_cluster, tab_3d = st.tabs(
-        ["Preprocessing", "Ground Segmentation", "Clusters", "Full 3D View"]
-    )
+    if mode == "Single Frame":
+        tab_preproc, tab_ground, tab_cluster, tab_3d = st.tabs(
+            ["Preprocessing", "Ground Segmentation", "Clusters", "Full 3D View"]
+        )
 
-    with tab_preproc:
-        render_preprocessing(r)
-    with tab_ground:
-        render_ground(r)
-    with tab_cluster:
-        render_clusters(r)
-    with tab_3d:
-        render_3d(r)
+        with tab_preproc:
+            render_preprocessing(r)
+        with tab_ground:
+            render_ground(r)
+        with tab_cluster:
+            render_clusters(r)
+        with tab_3d:
+            render_3d(r)
+    else:
+        # Simplified sequence view
+        st.caption(f"Frame {frame_idx + 1} / {num_frames}")
+        if r.get("image_file"):
+            st.image(r["image_file"], use_container_width=True)
+        fig = _scatter3d_clusters(r["obstacle_points"], r["cluster_labels"])
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Auto-play loop (must be at the end so display renders first)
+    if mode == "Sequence" and st.session_state.get("auto_play"):
+        time.sleep(1.0 / fps)
+        st.session_state["_advance_frame"] = True
+        st.rerun()
 
 
 if __name__ == "__main__":
