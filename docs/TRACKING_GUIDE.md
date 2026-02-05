@@ -1,6 +1,6 @@
-# Multi-Object Tracking: A Learning Guide
+# Multi-Object Tracking Learning Guide
 
-This guide explains the concepts behind multi-object tracking for LiDAR point clouds. The goal is to help you understand **WHY** things work, not just what to implement.
+I want to impliment code and algorithms by hand, so claude generated a guide to walkthrough these concepts like a pset.
 
 ---
 
