@@ -10,6 +10,8 @@ Implements the preprocessing and segmentation stages of a LiDAR processing pipel
 4. Cluster obstacles (DBSCAN)
 5. Visualize
 
+Tracking is WIP
+
 ## Run
 
 Python 3.10+
