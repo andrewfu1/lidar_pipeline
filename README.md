@@ -1,6 +1,6 @@
 # LiDAR Point Cloud Pipeline
 
-Implements the preprocessing and segmentation stages of a LiDAR processing pipeline for Velodyne point clouds from the [KITTI dataset](https://www.cvlibs.net/datasets/kitti/).
+Implements the preprocessing and segmentation stages of a LiDAR processing pipeline for Velodyne point clouds from the [KITTI dataset](https://www.cvlibs.net/datasets/kitti/). Tracking is WIP
 
 ## Pipeline
 
