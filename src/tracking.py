@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from scipy.optimize import linear_sum_assignment
 from enum import Enum
 
+MIN_BBOX_DIM = 0.3
+MAX_BBOX_DIM = 12.0
+
 @dataclass
 class BoundingBox:
     min_x: float
@@ -29,7 +32,7 @@ class Track:
     track_id: int
     bounding_box: BoundingBox
     n_init: int = 3
-    max_age: int = 5
+    max_age: int = 3
     age: int = 1
     hits: int = 1
     misses: int = 0
@@ -50,13 +53,22 @@ def extract_detection(labels: np.ndarray, points: np.ndarray, frame: int) -> lis
         cluster_points = cluster_groups[cluster_id]
 
         bounding_box = BoundingBox(
-            cluster_points[:, 0].min(), 
-            cluster_points[:, 1].min(), 
+            cluster_points[:, 0].min(),
+            cluster_points[:, 1].min(),
             cluster_points[:, 2].min(),
             cluster_points[:, 0].max(),
             cluster_points[:, 1].max(),
             cluster_points[:, 2].max()
         )
+
+        # Size filtering
+        width_x = bounding_box.max_x - bounding_box.min_x
+        width_y = bounding_box.max_y - bounding_box.min_y
+        if width_x < MIN_BBOX_DIM or width_y < MIN_BBOX_DIM:
+            continue
+        if width_x > MAX_BBOX_DIM or width_y > MAX_BBOX_DIM:
+            continue
+
         all_detections.append(Detection(bounding_box, frame, cluster_id, len(cluster_points)))
 
     return all_detections
@@ -101,7 +113,7 @@ def object_assignment(detections: list[Detection], tracks: list[Track]):
     for i in range(len(row_ind)):
         detection_idx = row_ind[i]
         track_idx = col_ind[i]
-        if cost_matrix[detection_idx][track_idx] > 0.25:
+        if cost_matrix[detection_idx][track_idx] > 0.1:
             output_pair.append((detection_idx,track_idx))
 
     matched_detections = set()
@@ -124,7 +136,7 @@ def object_assignment(detections: list[Detection], tracks: list[Track]):
             
 
 class Tracker:
-    def __init__(self, n_init: int = 3, max_age: int = 5, iou_threshold: float = 0.25):
+    def __init__(self, n_init: int = 3, max_age: int = 3, iou_threshold: float = 0.1):
         self.next_id = 0
         self.all_tracks: list[Track] = []
         self.n_init = n_init
@@ -174,7 +186,7 @@ class Tracker:
 
         confirmed_tracks = []
         for track in self.all_tracks:
-            if track.status == TrackStatus.CONFIRMED:
+            if track.status == TrackStatus.CONFIRMED and track.misses <= 1:
                 confirmed_tracks.append(track)
 
         return confirmed_tracks
