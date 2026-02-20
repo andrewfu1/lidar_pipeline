@@ -1,6 +1,6 @@
 # LiDAR Point Cloud Pipeline
 
-A LiDAR processing pipeline for Velodyne point clouds with multi-object tracking.
+A LiDAR processing pipeline for Velodyne point clouds with multi object tracking.
 
 ## Pipeline
 
@@ -10,7 +10,7 @@ A LiDAR processing pipeline for Velodyne point clouds with multi-object tracking
 3. Ground plane extraction (RANSAC)
 4. Cluster obstacles (DBSCAN)
 
-**Sequence**
+**Sequence (WIP)**
 1. Process all frames in sequence
 2. Extract detections from clusters
 3. Associate detections across frames (Hungarian algorithm with IoU)
